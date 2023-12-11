@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Tuple, Union, BinaryIO
 import fire
 import soundfile as sf
 import io
-from petrel_client.client import Client
 
 import numpy as np
 import torch
@@ -17,30 +16,13 @@ from transformers import WhisperTokenizer, WhisperFeatureExtractor
 
 
 logger = logging.getLogger(__name__)
-class MyClient(object):
-    def __init__(self):
-        self.client = Client('~/petreloss.conf')
-    
-    def get (self, key, enable_stream=False):
-        index = key.find("/")
-        bucket = key[:index]
-        new_key = key[index+1:]
-        if bucket == "asr" or bucket == "exp":
-            return self.client.get("asr:s3://{}/".format(bucket) + new_key, no_cache=True, enable_stream=enable_stream)
-        elif bucket == "youtubeBucket":
-            return self.client.get("youtube:s3://{}/".format(bucket) + new_key, no_cache=True, enable_stream=enable_stream)
-        else:
-            with open(key, 'rb') as f:
-                return f.read()
 
 def process_dataset(batch, tokenizer):
-    client = MyClient()
     audio_path = batch["audio"]
     try:
-        s3b = client.get(audio_path)
-        with io.BytesIO(s3b) as fobj: 
-            info = sf.info(fobj)
-            input_length = info.duration
+
+        info = sf.info(audio_path)
+        input_length = info.duration
     except:
         input_length = 0.0
     text_features = tokenizer(batch["text"])
@@ -64,18 +46,17 @@ def load_speech_text_paired_dataset(
     min_input_length = 0.0,
     max_input_length = 30.0,
 ):
+
     if os.path.exists(os.path.join(dataroot, f"processed_{manifest_files}".replace("*", "all"))):
         logger.warning("load processed dataset")
         dataset = datasets.load_from_disk(os.path.join(dataroot, f"processed_{manifest_files}".replace("*", "all")))
         if shuffle:
             dataset = dataset.shuffle(seed)
         return dataset
-    
-
-    
     logger.warning(f"load dataset from scratch from {dataroot}/{manifest_files}")
 
     manifest_files_list = manifest_files.split(",")
+    
     raw_dataset = datasets.load_dataset(
         dataroot, data_files=manifest_files_list, split="train", streaming=False
     )
@@ -83,7 +64,7 @@ def load_speech_text_paired_dataset(
     dataset = raw_dataset.map(
         process_dataset,
         fn_kwargs={
-            "tokenizer": tokenizer,
+            "tokenizer": tokenizer
         },
         remove_columns=raw_dataset.column_names,
         load_from_cache_file=False,
@@ -101,24 +82,6 @@ def load_speech_text_paired_dataset(
     dataset.save_to_disk(os.path.join(dataroot, f"processed_{manifest_files}".replace("*", "all")))
 
     return dataset
-
-
-def collate_tokens(
-        values: List[List[int]],
-        pad_id: int
-):
-    size = max(len(v) for v in values)
-    batch_size = len(values)
-    res = torch.LongTensor(batch_size, size).fill_(pad_id)
-
-    def copy_tensor(src, dst):
-        assert dst.numel() == src.numel()
-        dst.copy_(src)
-
-    for i, v in enumerate(values):
-        copy_tensor(torch.LongTensor(v), res[i][: len(v)])
-
-    return res
 
 def get_waveform(
     path_or_fp: Union[str, BinaryIO],
@@ -149,12 +112,10 @@ def get_waveform(
         import soundfile as sf
     except ImportError:
         raise ImportError("Please install soundfile to load WAV/FLACC/OGG/MP3 audios")
-    client = MyClient()
-    s3b = client.get(path_or_fp)
-    with io.BytesIO(s3b) as fobj:
-        waveform, sample_rate = sf.read(
-            fobj, dtype="float32", always_2d=True, frames=frames, start=start
-        )
+
+    waveform, sample_rate = sf.read(
+        path_or_fp, dtype="float32", always_2d=True, frames=frames, start=start
+    )
     waveform = waveform.T
 
     waveform, sample_rate = convert_waveform(waveform, sample_rate, to_mono=mono, to_sample_rate=output_sample_rate)
@@ -256,7 +217,7 @@ class SpeechTextPairedDataCollator:
             return_attention_mask=True,
             return_tensors="pt"
         )
-            
+
         return {
             "labels": labels,
             "input_features": speech_inputs.input_features,

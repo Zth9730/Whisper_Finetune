@@ -31,4 +31,8 @@ class FinetuneWhisperModel(PreTrainedModel):
         self.whisper_model = WhisperForConditionalGeneration(self.whisper_config)
 
     def forward(self, **kwargs):
-        return self.whisper_model(**kwargs)
+        x =  self.whisper_model(**kwargs)
+        return x
+    
+    def generate(self, **kwargs):
+        return self.whisper_model.generate(**kwargs)

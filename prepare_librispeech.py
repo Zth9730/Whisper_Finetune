@@ -34,7 +34,7 @@ if __name__ == "__main__":
                         help="Path to the input directory", required=True)
     parser.add_argument("--output_file", type=str, default=None,
                         help="Path to the output manifest file", required=True)
-    parser.add_argument("--splits", type=str, default="train-clean-100,train-clean-360,train-other-500",
+    parser.add_argument("--splits", type=str, default="dev-clean,dev-other",
                         help="the splits")
     
     args = parser.parse_args()
